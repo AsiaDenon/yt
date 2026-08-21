@@ -118,7 +118,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <script src="https://www.youtube.com/iframe_api" onerror="window.__ytApiScriptFailed=true"></script>
 <script>
 (function(){
-var TOOL_VERSION='v0.011';
+var TOOL_VERSION='v0.012';
 document.getElementById('versionInfo').textContent=TOOL_VERSION;
 var YT_READY=false, YT_PENDING=null;
 window.onYouTubeIframeAPIReady=function(){YT_READY=true;logDebug('onYouTubeIframeAPIReady gefeuert, YT_READY=true'+(YT_PENDING?' (verarbeite wartende ID '+YT_PENDING+')':''));if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
@@ -143,8 +143,7 @@ function H(url){
 }
 
 function loadRefVideo(videoId){
-  logDebug('loadRefVideo() aufgerufen mit videoId="'+videoId+'", YT_READY='+YT_READY+', YT vorhanden='+(typeof YT!=='undefined'));
-  if(!YT_READY){YT_PENDING=videoId;logDebug('YT_READY=false → videoId in YT_PENDING geparkt, warte auf onYouTubeIframeAPIReady');return}
+  logDebug('loadRefVideo() aufgerufen mit videoId="'+videoId+'"');
   try{
     var container=document.getElementById('refPlayerContainer');
     if(C&&typeof C.destroy==='function'){logDebug('zerstöre alten Player (C.destroy())');C.destroy();C=null}
@@ -155,6 +154,7 @@ function loadRefVideo(videoId){
       logDebug('onReady gefeuert für "'+videoId+'"');
       document.getElementById('refStatusBadge').textContent='✅ Geladen';
       document.getElementById('refStatusBadge').className='badge badge-green';
+      try{localStorage.setItem('yt_tool_ref_video',videoId)}catch(e){}
     },onError:function(ev){
       logDebug('onError gefeuert für "'+videoId+'", error.data='+(ev&&ev.data));
       document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Laden';
@@ -277,6 +277,13 @@ var V=document.getElementById('searchGrid');
 
 function getMaxResults(){return document.getElementById('resultCountSelect').value}
 
+function saveResultsToStorage(){
+  var items=Array.prototype.slice.call(V.querySelectorAll('.search-item')).map(function(el){
+    return{videoId:el.dataset.videoId,title:el.dataset.title,channelTitle:el.dataset.channelTitle,thumb:el.dataset.thumb};
+  });
+  try{localStorage.setItem('yt_tool_results',JSON.stringify(items))}catch(e){}
+}
+
 function renderItem(apiItem){
   var videoId=apiItem.id?apiItem.id.videoId:null;
   if(!videoId)return;
@@ -289,11 +296,13 @@ function renderItem(apiItem){
   el.dataset.videoId=videoId;
   el.dataset.channelTitle=channelTitle;
   el.dataset.title=title;
+  el.dataset.thumb=thumb;
   el.innerHTML='<button class=del-btn title="Entfernen">✕</button><img src="'+thumb+'" alt="" draggable=false><div class=caption>'+title+'</div><div class=channel>'+channelTitle+'</div>';
   el.querySelector('.del-btn').addEventListener('click',function(ev){
     ev.stopPropagation();
     el.remove();
     updateExportCount();
+    saveResultsToStorage();
   });
   el.addEventListener('click',function(){
     document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
@@ -302,6 +311,16 @@ function renderItem(apiItem){
     loadRefVideo(videoId);
   });
   V.appendChild(el);
+  saveResultsToStorage();
+}
+
+function restoreResultsFromStorage(){
+  var items; try{items=JSON.parse(localStorage.getItem('yt_tool_results')||'[]')}catch(e){items=[]}
+  items.forEach(function(it){
+    if(!it.videoId)return;
+    renderItem({id:{videoId:it.videoId},snippet:{title:it.title,channelTitle:it.channelTitle,thumbnails:{medium:{url:it.thumb}}}});
+  });
+  return items.length;
 }
 
 function updateExportCount(){
@@ -443,40 +462,52 @@ document.getElementById('clearResultsBtn').addEventListener('click',function(){
   V.innerHTML='';
   nextPageToken=null;
   updateExportCount();
+  saveResultsToStorage();
 });
 
-// --- Automatisches Referenz-Video beim Start ---
-try{
-  if(localStorage.getItem('youtube_api_key')){
-    document.getElementById('refStatusBadge').textContent='🔄 Suche Referenz-Video…';
-    document.getElementById('refStatusBadge').className='badge';
-    runSearch('party dance mix',function(items){
-      try{
-        if(items&&items.length){
-          var pick=items[Math.floor(Math.random()*items.length)];
-          var videoId=pick.id?pick.id.videoId:null;
-          if(videoId){
-            document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
-            document.getElementById('refStatusBadge').textContent='🔄 Lade…';
-            document.getElementById('refStatusBadge').className='badge';
-            loadRefVideo(videoId);
+// --- Start: Ergebnisse & Referenz-Video aus localStorage wiederherstellen ---
+var restoredCount=restoreResultsFromStorage();
+updateExportCount();
+var savedRefVideo=null; try{savedRefVideo=localStorage.getItem('yt_tool_ref_video')}catch(e){}
+if(savedRefVideo){
+  document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+savedRefVideo;
+  document.getElementById('refStatusBadge').textContent='🔄 Lade…';
+  document.getElementById('refStatusBadge').className='badge';
+  if(YT_READY)loadRefVideo(savedRefVideo);else YT_PENDING=savedRefVideo;
+}
+if(!restoredCount&&!savedRefVideo){
+  try{
+    if(localStorage.getItem('youtube_api_key')){
+      document.getElementById('refStatusBadge').textContent='🔄 Suche Referenz-Video…';
+      document.getElementById('refStatusBadge').className='badge';
+      runSearch('party dance mix',function(items){
+        try{
+          if(items&&items.length){
+            var pick=items[Math.floor(Math.random()*items.length)];
+            var videoId=pick.id?pick.id.videoId:null;
+            if(videoId){
+              document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
+              document.getElementById('refStatusBadge').textContent='🔄 Lade…';
+              document.getElementById('refStatusBadge').className='badge';
+              loadRefVideo(videoId);
+            }else{
+              document.getElementById('refStatusBadge').textContent='⚠️ Kein automatisches Video gefunden';
+              document.getElementById('refStatusBadge').className='badge badge-red';
+            }
           }else{
-            document.getElementById('refStatusBadge').textContent='⚠️ Kein automatisches Video gefunden';
+            document.getElementById('refStatusBadge').textContent='⚠️ Auto-Suche lieferte keine Ergebnisse';
             document.getElementById('refStatusBadge').className='badge badge-red';
           }
-        }else{
-          document.getElementById('refStatusBadge').textContent='⚠️ Auto-Suche lieferte keine Ergebnisse';
+        }catch(innerErr){
+          console.error('Auto-Load Fehler (Callback):',innerErr);
+          document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Auto-Laden';
           document.getElementById('refStatusBadge').className='badge badge-red';
         }
-      }catch(innerErr){
-        console.error('Auto-Load Fehler (Callback):',innerErr);
-        document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Auto-Laden';
-        document.getElementById('refStatusBadge').className='badge badge-red';
-      }
-    });
+      });
+    }
+  }catch(outerErr){
+    console.error('Auto-Load Fehler (Start):',outerErr);
   }
-}catch(outerErr){
-  console.error('Auto-Load Fehler (Start):',outerErr);
 }
 
 })();
