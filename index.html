@@ -1,0 +1,403 @@
+<!DOCTYPE html><html lang=de><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Video-Suche Testtool</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f0f0f;color:#f0f0f0;font-size:15px;padding:16px}
+.app{max-width:900px;margin:0 auto}
+h1{font-size:20px;margin-bottom:16px}
+h2{font-size:15px;margin-bottom:12px}
+.card{background:#1c1c1e;border:1px solid #2c2c2e;border-radius:12px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+label{font-size:13px;color:#aaa;display:block;margin-bottom:4px}
+input[type=text]{font-size:14px;padding:8px 10px;border-radius:8px;border:1px solid #3a3a3c;background:#2c2c2e;color:#f0f0f0;outline:none;width:100%}
+select{font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid #3a3a3c;background:#2c2c2e;color:#f0f0f0}
+.btn{background:#2c2c2e;border:1px solid #3a3a3c;border-radius:8px;padding:8px 14px;font-size:13px;color:#f0f0f0;cursor:pointer}
+.btn:hover{background:#3a3a3c}
+.btn-primary{background:#f0f0f0;color:#0f0f0f;border-color:#f0f0f0;font-weight:500}
+.sq-btn{width:36px;height:36px;padding:0;font-size:16px;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:8px;color:#f0f0f0;cursor:pointer;flex-shrink:0}
+.sq-btn:hover{background:#3a3a3c}
+.video-wrapper{position:relative;width:100%;max-width:480px;padding-bottom:calc(480px*0.5625);height:0;background:#000;border-radius:8px;overflow:hidden;margin:0 auto}
+.video-wrapper iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
+.badge{font-size:12px;padding:3px 10px;border-radius:6px;background:#2c2c2e;color:#aaa;display:inline-flex;align-items:center;border:1px solid #3a3a3c}
+.badge-green{background:#1a3a1a;color:#6fcf6f;border-color:#2d5a2d}
+.badge-red{background:#3a1a1a;color:#cf6f6f;border-color:#5a2d2d}
+.search-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:12px}
+.search-item{position:relative;cursor:pointer;border-radius:8px;overflow:hidden;border:1px solid #2c2c2e;background:#1c1c1e;transition:transform .1s}
+.search-item:hover{transform:scale(1.02)}
+.search-item img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
+.search-item .caption{padding:6px;font-size:12px;color:#ccc;line-height:1.3}
+.search-item .channel{padding:0 6px 6px;font-size:11px;color:#888}
+.search-item .del-btn{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.75);color:#fff;border:none;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+.search-item .del-btn:hover{background:#c62828}
+.load-more-btn{grid-column:1/-1;display:flex;justify-content:center;padding:10px}
+.text-small{font-size:11px;color:#666}
+.status-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#888;margin-top:8px}
+textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px solid #3a3a3c;border-radius:8px;padding:10px;font-family:monospace;font-size:12px;resize:vertical}
+.fallback-entry{font-size:12px;color:#ccc;margin-bottom:4px}
+</style></head>
+<body>
+<div class=app>
+<h1>🔍 Video-Suche Testtool</h1>
+
+<div class=card>
+<h2>API-Keys</h2>
+<div class=row style="margin-bottom:12px">
+<div style="flex:1;min-width:200px">
+<label>YouTube API-Key <span id=ytKeyStatus style="color:#c62828">✘</span></label>
+<input type=text id=youtubeApiKeyInput placeholder="YouTube Data API v3 Key…">
+</div>
+</div>
+<div class=row>
+<div style="flex:1;min-width:200px">
+<label>Last.fm API-Key <span id=lastfmKeyStatus style="color:#c62828">✘</span> (optional, für Stufe 1)</label>
+<input type=text id=lastfmApiKeyInput placeholder="Last.fm API-Key…">
+</div>
+</div>
+</div>
+
+<div class=card>
+<h2>Referenz-Video (für ✨-Empfehlung)</h2>
+<div class=row style="margin-bottom:12px">
+<input type=text id=refUrlInput placeholder="YouTube-URL…" style="flex:1">
+<button class="btn btn-primary" id=loadRefBtn>Laden</button>
+<span class=badge id=refStatusBadge>⏳ Bereit</span>
+</div>
+<div class=video-wrapper id=refPlayerContainer><div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:13px">Kein Video geladen</div></div>
+</div>
+
+<div class=card>
+<h2>Suche</h2>
+<div class=row style="margin-bottom:12px">
+<button class=sq-btn id=recommendBtn title="Empfehlungen für Referenz-Video">✨</button>
+<input type=text id=searchTextInput placeholder="Suchbegriff… (Enter zum Suchen)" style="flex:1">
+</div>
+<div class=row style="margin-bottom:4px">
+<div>
+<label>Anzahl Videos</label>
+<select id=resultCountSelect>
+<option value=10>10</option><option value=20>20</option><option value=30>30</option><option value=40>40</option><option value=49 selected>49 (max.)</option>
+</select>
+</div>
+<div>
+<label>Kategorie</label>
+<select id=categorySelect>
+<option value=10>Musik</option><option value="">keine Einschränkung</option>
+</select>
+</div>
+<div>
+<label>Last.fm-Modus</label>
+<select id=lastfmModeSelect>
+<option value=lastfm>über Last.fm</option><option value=direct>direkt (ohne API)</option>
+</select>
+</div>
+</div>
+<div class=status-row id=searchStatusRow style="display:none"><span id=searchTimerLabel></span></div>
+<div class=search-grid id=searchGrid></div>
+</div>
+
+<div class=card>
+<h2>Export</h2>
+<div class=row style="margin-bottom:12px">
+<button class=btn id=exportBtn>📋 Aktuelle Ergebnisse exportieren</button>
+<span class=text-small id=exportCountLabel></span>
+</div>
+<textarea id=exportOutput placeholder="Exportierter Text erscheint hier…" readonly></textarea>
+</div>
+
+<div class=card>
+<h2>⚠️ Fallback-Protokoll</h2>
+<div id=fallbackLogList></div>
+<button class=btn id=clearFallbackLogBtn style="margin-top:8px">Protokoll löschen</button>
+</div>
+
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+(function(){
+var YT_READY=false, YT_PENDING=null;
+window.onYouTubeIframeAPIReady=function(){YT_READY=true;if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
+
+var C=null; // reference player
+var tracking={videoId:''};
+var catFilter='', catFilterRetried=false;
+var searchBusy=false, nextPageToken=null, currentSearchKey=null;
+
+function H(url){
+  var t=url.trim(); if(!t) return null;
+  if(/^[a-zA-Z0-9_-]{11}$/.test(t)) return t;
+  try{
+    var n=new URL(t);
+    if(n.hostname==='youtu.be'){var a=n.pathname.slice(1).split('/')[0]; if(/^[a-zA-Z0-9_-]{11}$/.test(a)) return a}
+    if(n.hostname.indexOf('youtube.com')!==-1){var v=n.searchParams.get('v'); if(v&&/^[a-zA-Z0-9_-]{11}$/.test(v)) return v}
+    if(n.pathname.indexOf('/embed/')===0){var a2=n.pathname.split('/embed/')[1].split('/')[0]; if(/^[a-zA-Z0-9_-]{11}$/.test(a2)) return a2}
+    if(n.pathname.indexOf('/shorts/')===0){var a3=n.pathname.split('/shorts/')[1].split('/')[0]; if(/^[a-zA-Z0-9_-]{11}$/.test(a3)) return a3}
+  }catch(e){}
+  return null;
+}
+
+function loadRefVideo(videoId){
+  if(!YT_READY){YT_PENDING=videoId;return}
+  var container=document.getElementById('refPlayerContainer');
+  if(C&&typeof C.destroy==='function'){C.destroy();C=null}
+  container.innerHTML='';
+  var inner=document.createElement('div');inner.id='refPlayer_inner';container.appendChild(inner);
+  C=new YT.Player('refPlayer_inner',{videoId:videoId,playerVars:{autoplay:0,controls:1,modestbranding:1,rel:0,playsinline:1,enablejsapi:1,origin:window.location.origin},events:{onReady:function(){
+    document.getElementById('refStatusBadge').textContent='✅ Geladen';
+    document.getElementById('refStatusBadge').className='badge badge-green';
+  },onError:function(){
+    document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Laden';
+    document.getElementById('refStatusBadge').className='badge badge-red';
+  }}});
+  tracking.videoId=videoId;
+}
+
+document.getElementById('loadRefBtn').addEventListener('click',function(){
+  var id=H(document.getElementById('refUrlInput').value);
+  if(!id){alert('Bitte gültige YouTube-URL eingeben.');return}
+  document.getElementById('refStatusBadge').textContent='🔄 Lade…';
+  document.getElementById('refStatusBadge').className='badge';
+  loadRefVideo(id);
+});
+
+// --- API Key handling (no password/premium gating) ---
+function updateYtKeyStatus(){document.getElementById('ytKeyStatus').textContent=localStorage.getItem('youtube_api_key')?'✔':'✘'}
+function updateLastfmKeyStatus(){document.getElementById('lastfmKeyStatus').textContent=localStorage.getItem('lastfm_api_key')?'✔':'✘'}
+var ytInput=document.getElementById('youtubeApiKeyInput');
+ytInput.value=localStorage.getItem('youtube_api_key')||'';
+ytInput.addEventListener('change',function(){
+  var v=ytInput.value.trim();
+  if(v)localStorage.setItem('youtube_api_key',v);else localStorage.removeItem('youtube_api_key');
+  updateYtKeyStatus();
+});
+var lfInput=document.getElementById('lastfmApiKeyInput');
+lfInput.value=localStorage.getItem('lastfm_api_key')||'';
+lfInput.addEventListener('change',function(){
+  var v=lfInput.value.trim();
+  if(v)localStorage.setItem('lastfm_api_key',v);else localStorage.removeItem('lastfm_api_key');
+  updateLastfmKeyStatus();
+});
+updateYtKeyStatus();updateLastfmKeyStatus();
+
+var lfModeSel=document.getElementById('lastfmModeSelect');
+lfModeSel.value=localStorage.getItem('lastfm_mode')||'lastfm';
+lfModeSel.addEventListener('change',function(){localStorage.setItem('lastfm_mode',lfModeSel.value)});
+
+// --- Fallback log (always visible, no premium gate) ---
+function logFallback(from,to,reason){
+  var entry={ts:Date.now(),from:from,to:to,reason:reason||''};
+  var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
+  log.unshift(entry); if(log.length>20)log=log.slice(0,20);
+  try{localStorage.setItem('fallback_log_tool',JSON.stringify(log))}catch(e){}
+  renderFallbackLog();
+}
+function renderFallbackLog(){
+  var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
+  var list=document.getElementById('fallbackLogList');
+  if(!log.length){list.innerHTML='<span class=text-small>Noch keine Fallback-Ereignisse.</span>';return}
+  list.innerHTML=log.map(function(e){
+    var d=new Date(e.ts);
+    var ds=String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getFullYear()).slice(-2)+' - '+d.toLocaleTimeString('de-DE');
+    return '<div class=fallback-entry>'+ds+' — Stufe '+e.from+'→'+e.to+(e.reason?': '+e.reason:'')+'</div>';
+  }).join('');
+}
+document.getElementById('clearFallbackLogBtn').addEventListener('click',function(){
+  localStorage.removeItem('fallback_log_tool');renderFallbackLog();
+});
+renderFallbackLog();
+
+// --- Last.fm / topic helpers (same logic as Dual Player) ---
+async function lastfmSimilarArtist(artistName){
+  var key=localStorage.getItem('lastfm_api_key');
+  if(!key||!artistName)return null;
+  var cacheKey=artistName.toLowerCase().trim();
+  var cache; try{cache=JSON.parse(localStorage.getItem('lastfm_similar_cache')||'{}')}catch(e){cache={}}
+  if(cache[cacheKey]&&Date.now()-cache[cacheKey].ts<6048e5){
+    var names=cache[cacheKey].names;
+    if(!names||!names.length)return null;
+    return names[Math.floor(Math.random()*names.length)];
+  }
+  try{
+    var params=new URLSearchParams({method:'artist.getsimilar',artist:artistName,api_key:key,format:'json',limit:'10'});
+    var res=await Promise.race([fetch('https://ws.audioscrobbler.com/2.0/?'+params.toString()),new Promise(function(rs,rj){setTimeout(function(){rj(new Error('timeout'))},8000)})]);
+    var data=await res.json();
+    var arr=data.similarartists&&data.similarartists.artist;
+    var names2=arr?arr.slice(0,10).map(function(x){return x.name}):[];
+    cache[cacheKey]={ts:Date.now(),names:names2};
+    try{localStorage.setItem('lastfm_similar_cache',JSON.stringify(cache))}catch(e){}
+    if(!names2.length)return null;
+    return names2[Math.floor(Math.random()*names2.length)];
+  }catch(e){return null}
+}
+async function getVideoTopicKeyword(videoId){
+  var apiKey=localStorage.getItem('youtube_api_key');
+  if(!apiKey||!videoId)return null;
+  try{
+    var params=new URLSearchParams({part:'topicDetails',id:videoId,key:apiKey});
+    var res=await Promise.race([fetch('https://www.googleapis.com/youtube/v3/videos?'+params.toString()),new Promise(function(rs,rj){setTimeout(function(){rj(new Error('timeout'))},8000)})]);
+    var data=await res.json();
+    var item=data.items&&data.items[0];
+    var cats=item&&item.topicDetails&&item.topicDetails.topicCategories;
+    if(!cats||!cats.length)return null;
+    var last=cats[0].split('/wiki/')[1];
+    if(!last)return null;
+    return decodeURIComponent(last).replace(/_/g,' ');
+  }catch(e){return null}
+}
+
+// --- Search rendering ---
+var V=document.getElementById('searchGrid');
+
+function getMaxResults(){return document.getElementById('resultCountSelect').value}
+
+function renderItem(apiItem){
+  var videoId=apiItem.id?apiItem.id.videoId:null;
+  if(!videoId)return;
+  var title=apiItem.snippet.title;
+  var channelTitle=apiItem.snippet.channelTitle||'';
+  var thumb=apiItem.snippet.thumbnails&&apiItem.snippet.thumbnails.medium?apiItem.snippet.thumbnails.medium.url:('https://i.ytimg.com/vi/'+videoId+'/mqdefault.jpg');
+  var el=document.createElement('div');
+  el.className='search-item';
+  el.dataset.videoId=videoId;
+  el.dataset.channelTitle=channelTitle;
+  el.dataset.title=title;
+  el.innerHTML='<button class=del-btn title="Entfernen">✕</button><img src="'+thumb+'" alt="" draggable=false><div class=caption>'+title+'</div><div class=channel>'+channelTitle+'</div>';
+  el.querySelector('.del-btn').addEventListener('click',function(ev){
+    ev.stopPropagation();
+    el.remove();
+    updateExportCount();
+  });
+  el.addEventListener('click',function(){
+    document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
+    document.getElementById('refStatusBadge').textContent='🔄 Lade…';
+    document.getElementById('refStatusBadge').className='badge';
+    loadRefVideo(videoId);
+  });
+  V.appendChild(el);
+}
+
+function updateExportCount(){
+  var count=V.querySelectorAll('.search-item').length;
+  document.getElementById('exportCountLabel').textContent=count+' Ergebnis(se) aktuell in der Liste';
+}
+
+function clearLoadMore(){
+  var e=V.querySelector('.load-more-btn');
+  if(e)e.remove();
+}
+function maybeShowLoadMore(){
+  clearLoadMore();
+  if(!nextPageToken)return;
+  var wrap=document.createElement('div');wrap.className='load-more-btn';
+  var btn=document.createElement('button');btn.className='btn btn-primary';btn.textContent='Mehr laden';
+  btn.addEventListener('click',function(){
+    wrap.innerHTML='Lädt…';
+    fetchSearch(currentSearchKey,nextPageToken,false);
+  });
+  wrap.appendChild(btn);V.appendChild(wrap);
+}
+
+async function fetchSearch(searchKey,pageToken,isNewSearch){
+  if(searchBusy)return;
+  searchBusy=true;
+  var apiKey=localStorage.getItem('youtube_api_key');
+  if(!apiKey){V.innerHTML='<p style="grid-column:1/-1;color:#888">Bitte YouTube API-Key eintragen.</p>';searchBusy=false;return}
+  try{
+    var query=searchKey.slice(2); // strip "q:"
+    var params=new URLSearchParams({part:'snippet',type:'video',maxResults:getMaxResults(),key:apiKey,q:query});
+    if(catFilter)params.set('videoCategoryId',catFilter);
+    if(pageToken)params.set('pageToken',pageToken);
+    var url='https://www.googleapis.com/youtube/v3/search?'+params.toString();
+    var resp=await Promise.race([fetch(url),new Promise(function(rs,rj){setTimeout(function(){rj(new Error('timeout'))},10000)})]);
+    var data=await resp.json();
+    if(data.error){
+      var msg=data.error.message;
+      if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">API-Fehler: '+msg+'</p>';
+      searchBusy=false;return;
+    }
+    if(catFilter&&!pageToken&&!catFilterRetried&&(!data.items||data.items.length<11)){
+      catFilterRetried=true;
+      var params2=new URLSearchParams({part:'snippet',type:'video',maxResults:getMaxResults(),key:apiKey,q:query});
+      var resp2=await Promise.race([fetch('https://www.googleapis.com/youtube/v3/search?'+params2.toString()),new Promise(function(rs,rj){setTimeout(function(){rj(new Error('timeout'))},10000)})]);
+      data=await resp2.json();
+    }
+    if(!data.items||data.items.length===0){
+      if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">Keine Ergebnisse gefunden.</p>';
+      clearLoadMore();searchBusy=false;return;
+    }
+    if(!pageToken)V.innerHTML='';
+    clearLoadMore();
+    data.items.forEach(renderItem);
+    nextPageToken=data.nextPageToken||null;
+    maybeShowLoadMore();
+    updateExportCount();
+  }catch(e){
+    if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">Netzwerkfehler: '+(e.message||'unbekannt')+'</p>';
+  }
+  searchBusy=false;
+}
+
+function runSearch(query){
+  catFilterRetried=false;
+  catFilter=document.getElementById('categorySelect').value;
+  currentSearchKey='q:'+query;
+  nextPageToken=null;
+  fetchSearch(currentSearchKey,null,true);
+}
+
+document.getElementById('searchTextInput').addEventListener('keypress',function(e){
+  if(e.key==='Enter'){
+    var v=document.getElementById('searchTextInput').value.trim();
+    if(v)runSearch(v);
+  }
+});
+
+// --- ✨ Recommendation (3-stage fallback, same logic as Dual Player) ---
+async function buildRecommendation(){
+  var channelTitle=C&&C.getVideoData?(C.getVideoData().author||null):null;
+  var videoId=tracking.videoId;
+  var query=null;
+  catFilter='';
+  var mode=localStorage.getItem('lastfm_mode')||'lastfm';
+  var lastfmKey=localStorage.getItem('lastfm_api_key');
+  var stufe1Attempted=mode==='lastfm'&&lastfmKey&&channelTitle;
+  if(stufe1Attempted){
+    var similar=await lastfmSimilarArtist(channelTitle);
+    if(similar)query=similar;
+    else logFallback(1,2,'Last.fm lieferte keine Treffer');
+  }
+  if(!query){
+    var topic=videoId?await getVideoTopicKeyword(videoId):null;
+    var built=(channelTitle||'')+(topic?' '+topic:'');
+    built=built.trim();
+    if(built){
+      query=built;
+      catFilter=document.getElementById('categorySelect').value;
+    }else{
+      logFallback(2,3,'Kein Kanal-/Genre-Signal verfügbar');
+    }
+  }
+  if(!query)query='dance mix';
+  runSearch(query);
+}
+document.getElementById('recommendBtn').addEventListener('click',function(){
+  document.getElementById('searchStatusRow').style.display='flex';
+  document.getElementById('searchTimerLabel').textContent='Suche Empfehlungen…';
+  buildRecommendation().finally(function(){
+    document.getElementById('searchStatusRow').style.display='none';
+  });
+});
+
+// --- Export ---
+document.getElementById('exportBtn').addEventListener('click',function(){
+  var items=Array.prototype.slice.call(V.querySelectorAll('.search-item'));
+  if(!items.length){document.getElementById('exportOutput').value='(keine Ergebnisse vorhanden)';return}
+  var lines=items.map(function(el,i){
+    return (i+1)+'. videoId: '+el.dataset.videoId+' | title: '+el.dataset.title+' | channelTitle: '+el.dataset.channelTitle;
+  });
+  document.getElementById('exportOutput').value=lines.join('\n');
+  updateExportCount();
+});
+updateExportCount();
+
+})();
+</script>
+</body></html>
