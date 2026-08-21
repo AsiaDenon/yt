@@ -115,13 +115,14 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 
 </div>
 
-<script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://www.youtube.com/iframe_api" onerror="window.__ytApiScriptFailed=true"></script>
 <script>
 (function(){
-var TOOL_VERSION='v0.010';
+var TOOL_VERSION='v0.011';
 document.getElementById('versionInfo').textContent=TOOL_VERSION;
 var YT_READY=false, YT_PENDING=null;
-window.onYouTubeIframeAPIReady=function(){YT_READY=true;if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
+window.onYouTubeIframeAPIReady=function(){YT_READY=true;logDebug('onYouTubeIframeAPIReady gefeuert, YT_READY=true'+(YT_PENDING?' (verarbeite wartende ID '+YT_PENDING+')':''));if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
+setTimeout(function(){if(window.__ytApiScriptFailed)logDebug('YouTube iframe_api Skript konnte nicht geladen werden (Netzwerk/Blocker)');else if(!YT_READY)logDebug('YT_READY nach 8s immer noch false – iframe_api evtl. blockiert')},8000);
 
 var C=null; // reference player
 var tracking={videoId:''};
@@ -142,24 +143,36 @@ function H(url){
 }
 
 function loadRefVideo(videoId){
-  if(!YT_READY){YT_PENDING=videoId;return}
-  var container=document.getElementById('refPlayerContainer');
-  if(C&&typeof C.destroy==='function'){C.destroy();C=null}
-  container.innerHTML='';
-  var inner=document.createElement('div');inner.id='refPlayer_inner';container.appendChild(inner);
-  C=new YT.Player('refPlayer_inner',{videoId:videoId,playerVars:{autoplay:0,controls:1,modestbranding:1,rel:0,playsinline:1,enablejsapi:1,origin:window.location.origin},events:{onReady:function(){
-    document.getElementById('refStatusBadge').textContent='✅ Geladen';
-    document.getElementById('refStatusBadge').className='badge badge-green';
-  },onError:function(){
-    document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Laden';
+  logDebug('loadRefVideo() aufgerufen mit videoId="'+videoId+'", YT_READY='+YT_READY+', YT vorhanden='+(typeof YT!=='undefined'));
+  if(!YT_READY){YT_PENDING=videoId;logDebug('YT_READY=false → videoId in YT_PENDING geparkt, warte auf onYouTubeIframeAPIReady');return}
+  try{
+    var container=document.getElementById('refPlayerContainer');
+    if(C&&typeof C.destroy==='function'){logDebug('zerstöre alten Player (C.destroy())');C.destroy();C=null}
+    container.innerHTML='';
+    var inner=document.createElement('div');inner.id='refPlayer_inner';container.appendChild(inner);
+    logDebug('erstelle neuen YT.Player für "'+videoId+'"');
+    C=new YT.Player('refPlayer_inner',{videoId:videoId,playerVars:{autoplay:0,controls:1,modestbranding:1,rel:0,playsinline:1,enablejsapi:1,origin:window.location.origin},events:{onReady:function(){
+      logDebug('onReady gefeuert für "'+videoId+'"');
+      document.getElementById('refStatusBadge').textContent='✅ Geladen';
+      document.getElementById('refStatusBadge').className='badge badge-green';
+    },onError:function(ev){
+      logDebug('onError gefeuert für "'+videoId+'", error.data='+(ev&&ev.data));
+      document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Laden';
+      document.getElementById('refStatusBadge').className='badge badge-red';
+    }}});
+    tracking.videoId=videoId;
+  }catch(ex){
+    logDebug('EXCEPTION in loadRefVideo(): '+(ex&&ex.message?ex.message:ex));
+    document.getElementById('refStatusBadge').textContent='⚠️ Fehler (siehe Debug-Log)';
     document.getElementById('refStatusBadge').className='badge badge-red';
-  }}});
-  tracking.videoId=videoId;
+  }
 }
 
 document.getElementById('loadRefBtn').addEventListener('click',function(){
-  var id=H(document.getElementById('refUrlInput').value);
-  if(!id){alert('Bitte gültige YouTube-URL eingeben.');return}
+  var raw=document.getElementById('refUrlInput').value;
+  var id=H(raw);
+  logDebug('"Laden" geklickt, Eingabe="'+raw+'" → geparste ID='+(id||'null'));
+  if(!id){alert('Bitte gültige YouTube-URL eingeben.');logDebug('Abbruch: H() konnte keine gültige Video-ID extrahieren');return}
   document.getElementById('refStatusBadge').textContent='🔄 Lade…';
   document.getElementById('refStatusBadge').className='badge';
   loadRefVideo(id);
@@ -188,21 +201,30 @@ var lfModeSel=document.getElementById('lastfmModeSelect');
 lfModeSel.value=localStorage.getItem('lastfm_mode')||'lastfm';
 lfModeSel.addEventListener('change',function(){localStorage.setItem('lastfm_mode',lfModeSel.value)});
 
-// --- Fallback log (always visible, no premium gate) ---
+// --- Fallback log (always visible, no premium gate) + Debug-Log (gleiche Box) ---
 function logFallback(from,to,reason){
-  var entry={ts:Date.now(),from:from,to:to,reason:reason||''};
+  var entry={ts:Date.now(),type:'fallback',from:from,to:to,reason:reason||''};
   var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
-  log.unshift(entry); if(log.length>20)log=log.slice(0,20);
+  log.unshift(entry); if(log.length>40)log=log.slice(0,40);
   try{localStorage.setItem('fallback_log_tool',JSON.stringify(log))}catch(e){}
   renderFallbackLog();
+}
+function logDebug(msg){
+  var entry={ts:Date.now(),type:'debug',msg:String(msg)};
+  var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
+  log.unshift(entry); if(log.length>40)log=log.slice(0,40);
+  try{localStorage.setItem('fallback_log_tool',JSON.stringify(log))}catch(e){}
+  renderFallbackLog();
+  try{console.log('[DEBUG]',msg)}catch(e){}
 }
 function renderFallbackLog(){
   var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
   var list=document.getElementById('fallbackLogList');
-  if(!log.length){list.innerHTML='<span class=text-small>Noch keine Fallback-Ereignisse.</span>';return}
+  if(!log.length){list.innerHTML='<span class=text-small>Noch keine Fallback-/Debug-Ereignisse.</span>';return}
   list.innerHTML=log.map(function(e){
     var d=new Date(e.ts);
     var ds=String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getFullYear()).slice(-2)+' - '+d.toLocaleTimeString('de-DE');
+    if(e.type==='debug')return '<div class=fallback-entry style="color:#0066cc">'+ds+' — 🐞 '+e.msg+'</div>';
     return '<div class=fallback-entry>'+ds+' — Stufe '+e.from+'→'+e.to+(e.reason?': '+e.reason:'')+'</div>';
   }).join('');
 }
