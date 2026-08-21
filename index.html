@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang=de><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Video-Suche Testtool</title><style>
+<!DOCTYPE html><html lang=de><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>YouTube Video Suche</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f0f0f;color:#f0f0f0;font-size:15px;padding:16px}
 .app{max-width:900px;margin:0 auto}
@@ -35,7 +35,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 </style></head>
 <body>
 <div class=app>
-<h1>🔍 Video-Suche Testtool</h1>
+<div class=row style="justify-content:space-between;margin-bottom:16px"><h1 style="margin-bottom:0">🔍 YouTube Video Suche</h1><span id=versionInfo style="font-size:11px;color:#666"></span></div>
 
 <div class=card>
 <h2>API-Keys</h2>
@@ -56,6 +56,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <div class=card>
 <h2>Referenz-Video (für ✨-Empfehlung)</h2>
 <div class=row style="margin-bottom:12px">
+<button class=sq-btn id=recommendBtnRef title="Empfehlungen suchen">✨</button>
 <input type=text id=refUrlInput placeholder="YouTube-URL…" style="flex:1">
 <button class="btn btn-primary" id=loadRefBtn>Laden</button>
 <span class=badge id=refStatusBadge>⏳ Bereit</span>
@@ -90,6 +91,10 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 </div>
 </div>
 <div class=status-row id=searchStatusRow style="display:none"><span id=searchTimerLabel></span></div>
+<div class=row style="margin-bottom:8px;margin-top:8px">
+<span class=badge id=resultsCounterBadge>0 Videos in der Liste</span>
+<button class=btn id=clearResultsBtn>🗑️ Ergebnisse löschen</button>
+</div>
 <div class=search-grid id=searchGrid></div>
 </div>
 
@@ -113,6 +118,8 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 (function(){
+var TOOL_VERSION='v1.0';
+document.getElementById('versionInfo').textContent=TOOL_VERSION;
 var YT_READY=false, YT_PENDING=null;
 window.onYouTubeIframeAPIReady=function(){YT_READY=true;if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
 
@@ -251,6 +258,7 @@ function getMaxResults(){return document.getElementById('resultCountSelect').val
 function renderItem(apiItem){
   var videoId=apiItem.id?apiItem.id.videoId:null;
   if(!videoId)return;
+  if(V.querySelector('.search-item[data-video-id="'+videoId+'"]'))return;
   var title=apiItem.snippet.title;
   var channelTitle=apiItem.snippet.channelTitle||'';
   var thumb=apiItem.snippet.thumbnails&&apiItem.snippet.thumbnails.medium?apiItem.snippet.thumbnails.medium.url:('https://i.ytimg.com/vi/'+videoId+'/mqdefault.jpg');
@@ -277,6 +285,7 @@ function renderItem(apiItem){
 function updateExportCount(){
   var count=V.querySelectorAll('.search-item').length;
   document.getElementById('exportCountLabel').textContent=count+' Ergebnis(se) aktuell in der Liste';
+  document.getElementById('resultsCounterBadge').textContent=count+' Video'+(count===1?'':'s')+' in der Liste';
 }
 
 function clearLoadMore(){
@@ -295,11 +304,16 @@ function maybeShowLoadMore(){
   wrap.appendChild(btn);V.appendChild(wrap);
 }
 
-async function fetchSearch(searchKey,pageToken,isNewSearch){
+function showSearchStatus(msg){
+  var row=document.getElementById('searchStatusRow');
+  document.getElementById('searchTimerLabel').textContent=msg;
+  row.style.display=msg?'flex':'none';
+}
+async function fetchSearch(searchKey,pageToken,isNewSearch,onDone){
   if(searchBusy)return;
   searchBusy=true;
   var apiKey=localStorage.getItem('youtube_api_key');
-  if(!apiKey){V.innerHTML='<p style="grid-column:1/-1;color:#888">Bitte YouTube API-Key eintragen.</p>';searchBusy=false;return}
+  if(!apiKey){showSearchStatus('Bitte YouTube API-Key eintragen.');searchBusy=false;if(onDone)onDone([]);return}
   try{
     var query=searchKey.slice(2); // strip "q:"
     var params=new URLSearchParams({part:'snippet',type:'video',maxResults:getMaxResults(),key:apiKey,q:query});
@@ -310,8 +324,8 @@ async function fetchSearch(searchKey,pageToken,isNewSearch){
     var data=await resp.json();
     if(data.error){
       var msg=data.error.message;
-      if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">API-Fehler: '+msg+'</p>';
-      searchBusy=false;return;
+      showSearchStatus('API-Fehler: '+msg);
+      searchBusy=false;if(onDone)onDone([]);return;
     }
     if(catFilter&&!pageToken&&!catFilterRetried&&(!data.items||data.items.length<11)){
       catFilterRetried=true;
@@ -320,27 +334,29 @@ async function fetchSearch(searchKey,pageToken,isNewSearch){
       data=await resp2.json();
     }
     if(!data.items||data.items.length===0){
-      if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">Keine Ergebnisse gefunden.</p>';
-      clearLoadMore();searchBusy=false;return;
+      showSearchStatus('Keine Ergebnisse gefunden.');
+      clearLoadMore();searchBusy=false;if(onDone)onDone([]);return;
     }
-    if(!pageToken)V.innerHTML='';
+    showSearchStatus('');
     clearLoadMore();
     data.items.forEach(renderItem);
     nextPageToken=data.nextPageToken||null;
     maybeShowLoadMore();
     updateExportCount();
+    if(onDone)onDone(data.items);
   }catch(e){
-    if(!pageToken)V.innerHTML='<p style="grid-column:1/-1;color:#888">Netzwerkfehler: '+(e.message||'unbekannt')+'</p>';
+    showSearchStatus('Netzwerkfehler: '+(e.message||'unbekannt'));
+    if(onDone)onDone([]);
   }
   searchBusy=false;
 }
 
-function runSearch(query){
+function runSearch(query,onDone){
   catFilterRetried=false;
   catFilter=document.getElementById('categorySelect').value;
   currentSearchKey='q:'+query;
   nextPageToken=null;
-  fetchSearch(currentSearchKey,null,true);
+  fetchSearch(currentSearchKey,null,true,onDone);
 }
 
 document.getElementById('searchTextInput').addEventListener('keypress',function(e){
@@ -378,13 +394,15 @@ async function buildRecommendation(){
   if(!query)query='dance mix';
   runSearch(query);
 }
-document.getElementById('recommendBtn').addEventListener('click',function(){
+function triggerRecommendation(){
   document.getElementById('searchStatusRow').style.display='flex';
   document.getElementById('searchTimerLabel').textContent='Suche Empfehlungen…';
   buildRecommendation().finally(function(){
     document.getElementById('searchStatusRow').style.display='none';
   });
-});
+}
+document.getElementById('recommendBtn').addEventListener('click',triggerRecommendation);
+document.getElementById('recommendBtnRef').addEventListener('click',triggerRecommendation);
 
 // --- Export ---
 document.getElementById('exportBtn').addEventListener('click',function(){
@@ -397,6 +415,47 @@ document.getElementById('exportBtn').addEventListener('click',function(){
   updateExportCount();
 });
 updateExportCount();
+
+// --- Ergebnisse löschen ---
+document.getElementById('clearResultsBtn').addEventListener('click',function(){
+  V.innerHTML='';
+  nextPageToken=null;
+  updateExportCount();
+});
+
+// --- Automatisches Referenz-Video beim Start ---
+try{
+  if(localStorage.getItem('youtube_api_key')){
+    document.getElementById('refStatusBadge').textContent='🔄 Suche Referenz-Video…';
+    document.getElementById('refStatusBadge').className='badge';
+    runSearch('party dance mix',function(items){
+      try{
+        if(items&&items.length){
+          var pick=items[Math.floor(Math.random()*items.length)];
+          var videoId=pick.id?pick.id.videoId:null;
+          if(videoId){
+            document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
+            document.getElementById('refStatusBadge').textContent='🔄 Lade…';
+            document.getElementById('refStatusBadge').className='badge';
+            loadRefVideo(videoId);
+          }else{
+            document.getElementById('refStatusBadge').textContent='⚠️ Kein automatisches Video gefunden';
+            document.getElementById('refStatusBadge').className='badge badge-red';
+          }
+        }else{
+          document.getElementById('refStatusBadge').textContent='⚠️ Auto-Suche lieferte keine Ergebnisse';
+          document.getElementById('refStatusBadge').className='badge badge-red';
+        }
+      }catch(innerErr){
+        console.error('Auto-Load Fehler (Callback):',innerErr);
+        document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Auto-Laden';
+        document.getElementById('refStatusBadge').className='badge badge-red';
+      }
+    });
+  }
+}catch(outerErr){
+  console.error('Auto-Load Fehler (Start):',outerErr);
+}
 
 })();
 </script>
