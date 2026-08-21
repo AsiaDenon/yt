@@ -27,7 +27,7 @@ select{font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid #3a3a3c
 .search-item .channel{padding:0 6px 6px;font-size:11px;color:#888}
 .search-item .del-btn{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.75);color:#fff;border:none;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
 .search-item .del-btn:hover{background:#c62828}
-.load-more-btn{grid-column:1/-1;display:flex;justify-content:center;padding:10px}
+.load-more-btn{display:none}
 .text-small{font-size:11px;color:#666}
 .status-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#888;margin-top:8px}
 textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px solid #3a3a3c;border-radius:8px;padding:10px;font-family:monospace;font-size:12px;resize:vertical}
@@ -36,22 +36,6 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <body>
 <div class=app>
 <div class=row style="justify-content:space-between;margin-bottom:16px"><h1 style="margin-bottom:0">🔍 YouTube Video Suche</h1><span id=versionInfo style="font-size:11px;color:#666"></span></div>
-
-<div class=card>
-<h2>API-Keys</h2>
-<div class=row style="margin-bottom:12px">
-<div style="flex:1;min-width:200px">
-<label>YouTube API-Key <span id=ytKeyStatus style="color:#c62828">✘</span></label>
-<input type=text id=youtubeApiKeyInput placeholder="YouTube Data API v3 Key…">
-</div>
-</div>
-<div class=row>
-<div style="flex:1;min-width:200px">
-<label>Last.fm API-Key <span id=lastfmKeyStatus style="color:#c62828">✘</span> (optional, für Stufe 1)</label>
-<input type=text id=lastfmApiKeyInput placeholder="Last.fm API-Key…">
-</div>
-</div>
-</div>
 
 <div class=card>
 <h2>Referenz-Video (für ✨-Empfehlung)</h2>
@@ -94,6 +78,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <div class=row style="margin-bottom:8px;margin-top:8px">
 <span class=badge id=resultsCounterBadge>0 Videos in der Liste</span>
 <button class=btn id=clearResultsBtn>🗑️ Ergebnisse löschen</button>
+<button class="btn btn-primary" id=loadMoreBtn style="margin-left:auto;display:none">Mehr laden</button>
 </div>
 <div class=search-grid id=searchGrid></div>
 </div>
@@ -110,7 +95,31 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <div class=card>
 <h2>⚠️ Fallback-Protokoll</h2>
 <div id=fallbackLogList></div>
-<button class=btn id=clearFallbackLogBtn style="margin-top:8px">Protokoll löschen</button>
+<div class=row style="margin-top:8px">
+<button class=btn id=clearFallbackLogBtn>Protokoll löschen</button>
+<button class=btn id=debugModeBtn>Debug Mode: OFF</button>
+</div>
+</div>
+
+<div class=card>
+<div class=row style="justify-content:space-between;align-items:center">
+<h2 style="margin-bottom:0">API-Keys</h2>
+<button class=sq-btn id=apiKeysToggleBtn title="Ein-/Ausklappen" style="width:18px;height:18px;font-size:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;line-height:1">▾</button>
+</div>
+<div id=apiKeysBody style="overflow:hidden;transition:max-height .3s ease,margin-top .3s ease">
+<div class=row style="margin-bottom:12px">
+<div style="flex:1;min-width:200px">
+<label>YouTube API-Key <span id=ytKeyStatus style="color:#c62828">✘</span></label>
+<input type=text id=youtubeApiKeyInput placeholder="YouTube Data API v3 Key…">
+</div>
+</div>
+<div class=row>
+<div style="flex:1;min-width:200px">
+<label>Last.fm API-Key <span id=lastfmKeyStatus style="color:#c62828">✘</span> (optional, für Stufe 1)</label>
+<input type=text id=lastfmApiKeyInput placeholder="Last.fm API-Key…">
+</div>
+</div>
+</div>
 </div>
 
 </div>
@@ -118,7 +127,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <script src="https://www.youtube.com/iframe_api" onerror="window.__ytApiScriptFailed=true"></script>
 <script>
 (function(){
-var TOOL_VERSION='v0.012';
+var TOOL_VERSION='v0.016';
 document.getElementById('versionInfo').textContent=TOOL_VERSION;
 var YT_READY=false, YT_PENDING=null;
 window.onYouTubeIframeAPIReady=function(){YT_READY=true;logDebug('onYouTubeIframeAPIReady gefeuert, YT_READY=true'+(YT_PENDING?' (verarbeite wartende ID '+YT_PENDING+')':''));if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
@@ -142,19 +151,20 @@ function H(url){
   return null;
 }
 
-function loadRefVideo(videoId){
-  logDebug('loadRefVideo() aufgerufen mit videoId="'+videoId+'"');
+function loadRefVideo(videoId,autoplay){
+  logDebug('loadRefVideo() aufgerufen mit videoId="'+videoId+'", autoplay='+!!autoplay);
   try{
     var container=document.getElementById('refPlayerContainer');
     if(C&&typeof C.destroy==='function'){logDebug('zerstöre alten Player (C.destroy())');C.destroy();C=null}
     container.innerHTML='';
     var inner=document.createElement('div');inner.id='refPlayer_inner';container.appendChild(inner);
     logDebug('erstelle neuen YT.Player für "'+videoId+'"');
-    C=new YT.Player('refPlayer_inner',{videoId:videoId,playerVars:{autoplay:0,controls:1,modestbranding:1,rel:0,playsinline:1,enablejsapi:1,origin:window.location.origin},events:{onReady:function(){
+    C=new YT.Player('refPlayer_inner',{videoId:videoId,playerVars:{autoplay:autoplay?1:0,controls:1,modestbranding:1,rel:0,playsinline:1,enablejsapi:1,origin:window.location.origin},events:{onReady:function(ev){
       logDebug('onReady gefeuert für "'+videoId+'"');
       document.getElementById('refStatusBadge').textContent='✅ Geladen';
       document.getElementById('refStatusBadge').className='badge badge-green';
       try{localStorage.setItem('yt_tool_ref_video',videoId)}catch(e){}
+      if(autoplay&&ev.target&&typeof ev.target.playVideo==='function')ev.target.playVideo();
     },onError:function(ev){
       logDebug('onError gefeuert für "'+videoId+'", error.data='+(ev&&ev.data));
       document.getElementById('refStatusBadge').textContent='⚠️ Fehler beim Laden';
@@ -201,7 +211,8 @@ var lfModeSel=document.getElementById('lastfmModeSelect');
 lfModeSel.value=localStorage.getItem('lastfm_mode')||'lastfm';
 lfModeSel.addEventListener('change',function(){localStorage.setItem('lastfm_mode',lfModeSel.value)});
 
-// --- Fallback log (always visible, no premium gate) + Debug-Log (gleiche Box) ---
+// --- Fallback log (always visible, no premium gate) + Debug-Log (gleiche Box, nur bei aktivem Debug Mode) ---
+var DEBUG_MODE=localStorage.getItem('yt_tool_debug_mode')==='1';
 function logFallback(from,to,reason){
   var entry={ts:Date.now(),type:'fallback',from:from,to:to,reason:reason||''};
   var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
@@ -210,6 +221,7 @@ function logFallback(from,to,reason){
   renderFallbackLog();
 }
 function logDebug(msg){
+  if(!DEBUG_MODE)return;
   var entry={ts:Date.now(),type:'debug',msg:String(msg)};
   var log; try{log=JSON.parse(localStorage.getItem('fallback_log_tool')||'[]')}catch(e){log=[]}
   log.unshift(entry); if(log.length>40)log=log.slice(0,40);
@@ -231,6 +243,14 @@ function renderFallbackLog(){
 document.getElementById('clearFallbackLogBtn').addEventListener('click',function(){
   localStorage.removeItem('fallback_log_tool');renderFallbackLog();
 });
+var debugModeBtn=document.getElementById('debugModeBtn');
+function updateDebugModeBtn(){debugModeBtn.textContent='Debug Mode: '+(DEBUG_MODE?'ON':'OFF')}
+debugModeBtn.addEventListener('click',function(){
+  DEBUG_MODE=!DEBUG_MODE;
+  try{localStorage.setItem('yt_tool_debug_mode',DEBUG_MODE?'1':'0')}catch(e){}
+  updateDebugModeBtn();
+});
+updateDebugModeBtn();
 renderFallbackLog();
 
 // --- Last.fm / topic helpers (same logic as Dual Player) ---
@@ -284,7 +304,7 @@ function saveResultsToStorage(){
   try{localStorage.setItem('yt_tool_results',JSON.stringify(items))}catch(e){}
 }
 
-function renderItem(apiItem){
+function renderItem(apiItem,insertBeforeNode){
   var videoId=apiItem.id?apiItem.id.videoId:null;
   if(!videoId)return;
   if(V.querySelector('.search-item[data-video-id="'+videoId+'"]'))return;
@@ -308,9 +328,9 @@ function renderItem(apiItem){
     document.getElementById('refUrlInput').value='https://www.youtube.com/watch?v='+videoId;
     document.getElementById('refStatusBadge').textContent='🔄 Lade…';
     document.getElementById('refStatusBadge').className='badge';
-    loadRefVideo(videoId);
+    loadRefVideo(videoId,true);
   });
-  V.appendChild(el);
+  if(insertBeforeNode)V.insertBefore(el,insertBeforeNode);else V.appendChild(el);
   saveResultsToStorage();
 }
 
@@ -330,19 +350,14 @@ function updateExportCount(){
 }
 
 function clearLoadMore(){
-  var e=V.querySelector('.load-more-btn');
-  if(e)e.remove();
+  var btn=document.getElementById('loadMoreBtn');
+  if(btn)btn.style.display='none';
 }
 function maybeShowLoadMore(){
-  clearLoadMore();
-  if(!nextPageToken)return;
-  var wrap=document.createElement('div');wrap.className='load-more-btn';
-  var btn=document.createElement('button');btn.className='btn btn-primary';btn.textContent='Mehr laden';
-  btn.addEventListener('click',function(){
-    wrap.innerHTML='Lädt…';
-    fetchSearch(currentSearchKey,nextPageToken,false);
-  });
-  wrap.appendChild(btn);V.appendChild(wrap);
+  var btn=document.getElementById('loadMoreBtn');
+  if(!btn)return;
+  if(!nextPageToken){btn.style.display='none';return}
+  btn.style.display='';btn.textContent='Mehr laden';btn.disabled=false;
 }
 
 function showSearchStatus(msg){
@@ -380,7 +395,8 @@ async function fetchSearch(searchKey,pageToken,isNewSearch,onDone){
     }
     showSearchStatus('');
     clearLoadMore();
-    data.items.forEach(renderItem);
+    var insertRef=V.firstChild;
+    data.items.forEach(function(it){renderItem(it,insertRef)});
     nextPageToken=data.nextPageToken||null;
     maybeShowLoadMore();
     updateExportCount();
@@ -461,9 +477,35 @@ updateExportCount();
 document.getElementById('clearResultsBtn').addEventListener('click',function(){
   V.innerHTML='';
   nextPageToken=null;
+  clearLoadMore();
   updateExportCount();
   saveResultsToStorage();
 });
+
+// --- Mehr laden ---
+document.getElementById('loadMoreBtn').addEventListener('click',function(){
+  this.textContent='Lädt…';this.disabled=true;
+  fetchSearch(currentSearchKey,nextPageToken,false);
+});
+
+// --- API-Keys Box ein-/ausklappen ---
+(function(){
+  var body=document.getElementById('apiKeysBody');
+  var btn=document.getElementById('apiKeysToggleBtn');
+  var collapsed=localStorage.getItem('yt_tool_apikeys_collapsed')==='1';
+  function apply(animate){
+    if(!animate)body.style.transition='none';
+    if(collapsed){body.style.maxHeight='0px';body.style.marginTop='0px';btn.textContent='▸'}
+    else{body.style.maxHeight=body.scrollHeight+'px';body.style.marginTop='12px';btn.textContent='▾'}
+    if(!animate)requestAnimationFrame(function(){body.style.transition='max-height .3s ease,margin-top .3s ease'});
+  }
+  btn.addEventListener('click',function(){
+    collapsed=!collapsed;
+    try{localStorage.setItem('yt_tool_apikeys_collapsed',collapsed?'1':'0')}catch(e){}
+    apply(true);
+  });
+  apply(false);
+})();
 
 // --- Start: Ergebnisse & Referenz-Video aus localStorage wiederherstellen ---
 var restoredCount=restoreResultsFromStorage();
