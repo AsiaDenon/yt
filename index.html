@@ -74,7 +74,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <div>
 <label>Anzahl Videos</label>
 <select id=resultCountSelect>
-<option value=10>10</option><option value=20>20</option><option value=30>30</option><option value=40>40</option><option value=49 selected>49 (max.)</option>
+<option value=1>1</option><option value=2>2</option><option value=3>3</option><option value=4>4</option><option value=5>5</option><option value=6>6</option><option value=7>7</option><option value=8>8</option><option value=9>9</option><option value=10 selected>10</option><option value=20>20</option><option value=30>30</option><option value=40>40</option><option value=49>49 (max.)</option>
 </select>
 </div>
 <div>
@@ -118,7 +118,7 @@ textarea{width:100%;min-height:160px;background:#0f0f0f;color:#f0f0f0;border:1px
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 (function(){
-var TOOL_VERSION='v1.0';
+var TOOL_VERSION='v0.010';
 document.getElementById('versionInfo').textContent=TOOL_VERSION;
 var YT_READY=false, YT_PENDING=null;
 window.onYouTubeIframeAPIReady=function(){YT_READY=true;if(YT_PENDING){loadRefVideo(YT_PENDING);YT_PENDING=null}};
